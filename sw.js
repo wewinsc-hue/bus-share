@@ -1,9 +1,9 @@
-const CACHE = 'bus-share-v1';
-
+const CACHE = 'bus-share-v2';
+ 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
-
+ 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
@@ -12,20 +12,17 @@ self.addEventListener('activate', (e) => {
   );
   self.clients.claim();
 });
-
+ 
+// 네트워크 우선: 온라인이면 항상 최신 파일을 받아오고, 캐시는 오프라인 대비용으로만 사용
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.open(CACHE).then((cache) =>
-      cache.match(e.request).then(
-        (hit) =>
-          hit ||
-          fetch(e.request)
-            .then((res) => {
-              cache.put(e.request, res.clone());
-              return res;
-            })
-            .catch(() => hit)
-      )
-    )
+    fetch(e.request)
+      .then((res) => {
+        const resClone = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(e.request, resClone));
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
+ 

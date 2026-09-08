@@ -193,8 +193,9 @@ function makeDays(){
 function makeSwissRev(){return Object.fromEntries([...PRICED_ROUTES,...(typeof EXTRA_ROUTES!=="undefined"?EXTRA_ROUTES:[])].map((r)=>[r,DEFAULT_PRICES[r]||0]));}
 function makeSwissDed(){return Object.fromEntries(SWISS_DED_ITEMS.map((i)=>[i.key,i.default]));}
 
+const DEFAULT_OIL_CHANGE = {baseKm:0,cycleKm:30000};
 function initial(){
-  return {days:makeDays(),prices:{...DEFAULT_PRICES},deductions:{...DEFAULT_DEDUCTIONS},waedae:{...DEFAULT_WAEDAE},swissRevenue:makeSwissRev(),customSwissRoutes:[],hiddenSwissRoutes:[],routeColors:{},customSwissDedItems:[],hiddenSwissDedKeys:[],swissDedOrder:[],customPriceRoutes:[],promotedRoutes:[],permaDeletedRoutes:[],tabOrder:[],tabLabels:{},charters:SEED_CHARTERS,swissDeductions:{},ledger:[],loans:SEED_LOANS,expenseCategories:[...DEFAULT_EXP_CATEGORIES],catExpenses:[],cardOrder:[],cards:DEFAULT_CARDS.map((c)=>({...c}))};
+  return {days:makeDays(),prices:{...DEFAULT_PRICES},deductions:{...DEFAULT_DEDUCTIONS},waedae:{...DEFAULT_WAEDAE},swissRevenue:makeSwissRev(),customSwissRoutes:[],hiddenSwissRoutes:[],routeColors:{},customSwissDedItems:[],hiddenSwissDedKeys:[],swissDedOrder:[],customPriceRoutes:[],promotedRoutes:[],permaDeletedRoutes:[],tabOrder:[],tabLabels:{},charters:SEED_CHARTERS,swissDeductions:{},ledger:[],loans:SEED_LOANS,expenseCategories:[...DEFAULT_EXP_CATEGORIES],catExpenses:[],cardOrder:[],cards:DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE}};
 }
 function normalDay(d){
   if(!d) return {am:[],pm:[],in:"",out:"",fuel:""};
@@ -205,7 +206,7 @@ function normalStore(s){
   const days={};
   Object.entries(s.days||{}).forEach(([k,d])=>{days[k]=normalDay(d);});
   const promotedRoutes=[...new Set((s.promotedRoutes||[]).filter((r)=>!PRICED_ROUTES.includes(r)))];
-  return {days,prices:{...DEFAULT_PRICES,...(s.prices||{})},deductions:{...DEFAULT_DEDUCTIONS,...(s.deductions||{})},waedae:{...DEFAULT_WAEDAE,...(s.waedae||{})},swissRevenue:{...makeSwissRev(),...(s.swissRevenue||{})},customSwissRoutes:s.customSwissRoutes||[],hiddenSwissRoutes:s.hiddenSwissRoutes||[],routeColors:s.routeColors||{},customSwissDedItems:s.customSwissDedItems||[],hiddenSwissDedKeys:s.hiddenSwissDedKeys||[],swissDedOrder:s.swissDedOrder||[],customPriceRoutes:s.customPriceRoutes||[],promotedRoutes,permaDeletedRoutes:s.permaDeletedRoutes||[],tabOrder:s.tabOrder||[],tabLabels:s.tabLabels||{},charters:s.charters||[],swissDeductions:s.swissDeductions||{},ledger:s.ledger||[],loans:s.loans||SEED_LOANS,expenseCategories:s.expenseCategories||[...DEFAULT_EXP_CATEGORIES],catExpenses:s.catExpenses||[],cardOrder:s.cardOrder||[],cards:s.cards||DEFAULT_CARDS.map((c)=>({...c}))};
+  return {days,prices:{...DEFAULT_PRICES,...(s.prices||{})},deductions:{...DEFAULT_DEDUCTIONS,...(s.deductions||{})},waedae:{...DEFAULT_WAEDAE,...(s.waedae||{})},swissRevenue:{...makeSwissRev(),...(s.swissRevenue||{})},customSwissRoutes:s.customSwissRoutes||[],hiddenSwissRoutes:s.hiddenSwissRoutes||[],routeColors:s.routeColors||{},customSwissDedItems:s.customSwissDedItems||[],hiddenSwissDedKeys:s.hiddenSwissDedKeys||[],swissDedOrder:s.swissDedOrder||[],customPriceRoutes:s.customPriceRoutes||[],promotedRoutes,permaDeletedRoutes:s.permaDeletedRoutes||[],tabOrder:s.tabOrder||[],tabLabels:s.tabLabels||{},charters:s.charters||[],swissDeductions:s.swissDeductions||{},ledger:s.ledger||[],loans:s.loans||SEED_LOANS,expenseCategories:s.expenseCategories||[...DEFAULT_EXP_CATEGORIES],catExpenses:s.catExpenses||[],cardOrder:s.cardOrder||[],cards:s.cards||DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE,...(s.oilChange||{})}};
 }
 
 function App(){
@@ -628,6 +629,10 @@ function App(){
     upd((p)=>{const ex=p.ledger.find((e)=>e.date?.startsWith(monthStr)&&e.type==="carryover");
       const ledger=ex?p.ledger.map((e)=>e.id===ex.id?{...e,amount:amt}:e):[...p.ledger,{id:uid(),date:ymd(year,month,1),type:"carryover",desc:"전월이월",amount:amt,payMethod:"자동"}];
       return {...p,ledger};});
+  };
+  const updOilChange=(field,v)=>{
+    const n=Number(String(v).replace(/[^0-9]/g,""))||0;
+    upd((p)=>({...p,oilChange:{...(p.oilChange||DEFAULT_OIL_CHANGE),[field]:n}}));
   };
   const delEntry=(id)=>upd((p)=>({...p,ledger:p.ledger.filter((e)=>e.id!==id)}));
   const updEntryDesc=(id,val)=>upd((p)=>({...p,ledger:p.ledger.map((e)=>e.id===id?{...e,desc:val}:e)}));
@@ -1147,6 +1152,18 @@ function App(){
             <input style={S.carryInput} type="number" value={carryover||""} placeholder="0" onChange={(e)=>setCarryover(e.target.value)}/>
             <span style={{fontSize:12,color:"#7a8295"}}>원</span>
           </div>
+          <div style={S.oilRow}>
+            <span style={S.oilLbl}>🛢 오일교환</span>
+            <input style={S.oilKmInput} type="text" inputMode="numeric" value={fmt(store.oilChange?.baseKm||0)} onChange={(e)=>updOilChange("baseKm",e.target.value)}/>
+            <span style={{fontSize:12,color:"#7a8295"}}>km</span>
+            <span style={S.oilArrow}>+</span>
+            <input style={S.oilCycleInput} type="text" inputMode="numeric" value={fmt(store.oilChange?.cycleKm||0)} onChange={(e)=>updOilChange("cycleKm",e.target.value)}/>
+            <span style={{fontSize:12,color:"#7a8295"}}>km 마다</span>
+            <div style={S.oilNextWrap}>
+              <div style={S.oilNextLbl}>다음 교환 예정</div>
+              <div style={S.oilNextKm}>{fmt((store.oilChange?.baseKm||0)+(store.oilChange?.cycleKm||0))}km</div>
+            </div>
+          </div>
           <table className="T">
             <thead><tr><th style={{width:55}}>날짜</th><th>적요</th><th style={{width:60}}>결제</th><th style={{width:75,textAlign:"right"}}>수입</th><th style={{width:75,textAlign:"right"}}>지출</th><th style={{width:28}}></th></tr></thead>
             <tbody>
@@ -1532,6 +1549,14 @@ const S={
   cardFooter:{fontSize:12.5,color:"#0d1520",marginTop:8,paddingTop:8,borderTop:"1px solid #262c39",display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6},
   carryRow:{display:"flex",alignItems:"center",gap:8,marginBottom:12,background:"#ffffff",border:"1px solid #2f3645",borderRadius:9,padding:"10px 12px"},
   carryInput:{flex:1,background:"#f0f3f8",border:"1px solid #2f3645",borderRadius:7,color:"#0d1520",padding:"7px 10px",fontSize:13,outline:"none",textAlign:"right"},
+  oilRow:{background:"#ffffff",border:"1px solid #2f3645",borderRadius:9,padding:"10px 12px",marginBottom:12,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"},
+  oilLbl:{fontSize:13,color:"#9aa3b5",whiteSpace:"nowrap",fontWeight:600,flexShrink:0},
+  oilKmInput:{width:96,background:"#f0f3f8",border:"1px solid #2f3645",borderRadius:7,color:"#0d1520",padding:"7px 8px",fontSize:13,outline:"none",textAlign:"right"},
+  oilArrow:{color:"#9aa3b5",fontSize:14,padding:"0 2px"},
+  oilCycleInput:{width:56,background:"#eef1f8",border:"1px dashed #9aa3b5",borderRadius:6,color:"#6b7585",padding:"5px 6px",fontSize:11.5,outline:"none",textAlign:"center"},
+  oilNextWrap:{marginLeft:"auto",textAlign:"right"},
+  oilNextLbl:{fontSize:10.5,color:"#9aa3b5"},
+  oilNextKm:{fontSize:16,fontWeight:800,color:"#3b6e8f"},
   entryForm:{display:"flex",gap:4,marginTop:8,marginBottom:8,flexWrap:"wrap",alignItems:"center"},
   ef:{background:"#f0f3f8",border:"1px solid #2f3645",borderRadius:8,padding:"7px 8px",color:"#0d1520",fontSize:12,outline:"none"},
   badge:{display:"inline-block",padding:"2px 7px",borderRadius:5,background:"#c8d4e8",color:"#2a3348",fontSize:11,fontWeight:600},

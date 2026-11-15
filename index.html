@@ -90,6 +90,7 @@ const HOLIDAYS = {
   "2027-12-27":"대체공휴일(크리스마스)",
 };
 const ROUTE_COLORS = {
+  "외대":"#7c3aed",
   "외부":"#e03030",
   "공휴일":"#64748b"
 };
@@ -116,10 +117,11 @@ const SWISS_DED_ITEMS = [
 ];
 const TOTAL_DEFAULT_SWISS = SWISS_DED_ITEMS.reduce((s,i)=>s+i.default,0);
 
-// 카드 목록은 store.cards에서 관리됩니다 (사용자가 직접 추가/수정/삭제)
-// 기본값(공유용): 빈 상태로 시작, 각자 본인 카드를 등록
+// 카드 목록은 store.cards에서 관리됩니다 (사용자가 직접 추가/수정/삭제 가능)
+// 공유용: 기본 카드 없음 (보는 사람이 직접 추가)
 const DEFAULT_CARDS = [];
 const DEFAULT_EXP_CATEGORIES = ["산악회 관련 지출","차량 수리비","식대","집 생활비","잡비"];
+
 
 const TABS = [
   {id:"calendar",label:"달력"},
@@ -151,8 +153,17 @@ const EXTRA_COLOR = "#5a7a9e";
 function getRouteColor(r){return ROUTE_COLORS[r]||EXTRA_ROUTE_COLORS[r]||EXTRA_COLOR;}
 
 
+// 공유용: 클라우드 동기화 없이 이 브라우저(로컬)에만 저장됩니다. 메인용의 기기 간 3-way 병합
+// 로직(FS_DOC/baseline/merge 유틸 등)은 여기서는 쓰지 않습니다.
+
+
+// 공유용: 평일이어도 자동으로 노선이 채워지지 않고, 보는 사람이 직접 입력하기 전까지 항상 공란
 const DEFAULT_AM=[];
 const DEFAULT_PM=[];
+// 공유용: 메인용에만 있던 옛 노선명 치환 이력은 여기선 해당 사항이 없어 비워둡니다.
+const ROUTE_NAME_ALIASES = {};
+function aliasRouteName(r){return ROUTE_NAME_ALIASES[r]||r;}
+function aliasRouteList(arr){return (arr||[]).map(aliasRouteName);}
 function getEffectiveDay(key,store){
   const stored=store?.days?.[key];
   // 사용자가 명시적으로 저장한 날(빈 값이어도)은 그대로 존중 - 더 이상 자동으로 기본노선이 되살아나지 않음
@@ -181,6 +192,9 @@ function buildGrid(y,m){
   return c;
 }
 
+// 공유용: 달력/외부매출/대출 모두 기본값을 비워둬서, 보는 사람이 직접 입력하기 전까지는
+// 아무 내용도 안 보입니다 (메인용에만 있는 반복 외부매출 자동입력 기능은 공유용엔 없음).
+// 클라우드 동기화도 없어서(로컬 브라우저에만 저장), 사장님의 실제 데이터와는 완전히 분리되어 있습니다.
 const SEED_DAYS={};
 const SEED_CHARTERS=[];
 const SEED_LOANS=[];
@@ -195,18 +209,18 @@ function makeSwissDed(){return Object.fromEntries(SWISS_DED_ITEMS.map((i)=>[i.ke
 
 const DEFAULT_OIL_CHANGE = {baseKm:0,cycleKm:30000};
 function initial(){
-  return {days:makeDays(),prices:{...DEFAULT_PRICES},deductions:{...DEFAULT_DEDUCTIONS},waedae:{...DEFAULT_WAEDAE},swissRevenue:makeSwissRev(),customSwissRoutes:[],hiddenSwissRoutes:[],routeColors:{},customSwissDedItems:[],hiddenSwissDedKeys:[],swissDedOrder:[],customPriceRoutes:[],promotedRoutes:[],permaDeletedRoutes:[],tabOrder:[],tabLabels:{},charters:SEED_CHARTERS,swissDeductions:{},ledger:[],loans:SEED_LOANS,expenseCategories:[...DEFAULT_EXP_CATEGORIES],catExpenses:[],cardOrder:[],cards:DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE}};
+  return {days:makeDays(),prices:{...DEFAULT_PRICES},deductions:{...DEFAULT_DEDUCTIONS},waedae:{...DEFAULT_WAEDAE},swissRevenue:makeSwissRev(),customSwissRoutes:[],hiddenSwissRoutes:[],routeColors:{},customSwissDedItems:[],hiddenSwissDedKeys:[],swissDedOrder:[],customPriceRoutes:[],promotedRoutes:[],permaDeletedRoutes:[],tabOrder:[],tabLabels:{},charters:SEED_CHARTERS,swissDeductions:{},ledger:[],loans:SEED_LOANS,expenseCategories:[...DEFAULT_EXP_CATEGORIES],catExpenses:[],cardOrder:[],cards:DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE},descPresets:[],waedaeLabel:"외대",accountLabels:{"국민":"계좌1","농협":"계좌2"}};
 }
 function normalDay(d){
   if(!d) return {am:[],pm:[],in:"",out:"",fuel:""};
-  if(Array.isArray(d.routes)) return {am:d.routes,pm:[],in:d.in||"",out:d.out||"",fuel:d.fuel||""};
-  return {am:d.am||[],pm:d.pm||[],in:d.in||"",out:d.out||"",fuel:d.fuel||""};
+  if(Array.isArray(d.routes)) return {am:aliasRouteList(d.routes),pm:[],in:d.in||"",out:d.out||"",fuel:d.fuel||""};
+  return {am:aliasRouteList(d.am),pm:aliasRouteList(d.pm),in:d.in||"",out:d.out||"",fuel:d.fuel||""};
 }
 function normalStore(s){
   const days={};
   Object.entries(s.days||{}).forEach(([k,d])=>{days[k]=normalDay(d);});
   const promotedRoutes=[...new Set((s.promotedRoutes||[]).filter((r)=>!PRICED_ROUTES.includes(r)))];
-  return {days,prices:{...DEFAULT_PRICES,...(s.prices||{})},deductions:{...DEFAULT_DEDUCTIONS,...(s.deductions||{})},waedae:{...DEFAULT_WAEDAE,...(s.waedae||{})},swissRevenue:{...makeSwissRev(),...(s.swissRevenue||{})},customSwissRoutes:s.customSwissRoutes||[],hiddenSwissRoutes:s.hiddenSwissRoutes||[],routeColors:s.routeColors||{},customSwissDedItems:s.customSwissDedItems||[],hiddenSwissDedKeys:s.hiddenSwissDedKeys||[],swissDedOrder:s.swissDedOrder||[],customPriceRoutes:s.customPriceRoutes||[],promotedRoutes,permaDeletedRoutes:s.permaDeletedRoutes||[],tabOrder:s.tabOrder||[],tabLabels:s.tabLabels||{},charters:s.charters||[],swissDeductions:s.swissDeductions||{},ledger:s.ledger||[],loans:s.loans||SEED_LOANS,expenseCategories:s.expenseCategories||[...DEFAULT_EXP_CATEGORIES],catExpenses:s.catExpenses||[],cardOrder:s.cardOrder||[],cards:s.cards||DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE,...(s.oilChange||{})}};
+  return {days,prices:{...DEFAULT_PRICES,...(s.prices||{})},deductions:{...DEFAULT_DEDUCTIONS,...(s.deductions||{})},waedae:{...DEFAULT_WAEDAE,...(s.waedae||{})},swissRevenue:{...makeSwissRev(),...(s.swissRevenue||{})},customSwissRoutes:s.customSwissRoutes||[],hiddenSwissRoutes:s.hiddenSwissRoutes||[],routeColors:s.routeColors||{},customSwissDedItems:s.customSwissDedItems||[],hiddenSwissDedKeys:s.hiddenSwissDedKeys||[],swissDedOrder:s.swissDedOrder||[],customPriceRoutes:s.customPriceRoutes||[],promotedRoutes,permaDeletedRoutes:s.permaDeletedRoutes||[],tabOrder:s.tabOrder||[],tabLabels:s.tabLabels||{},charters:s.charters||[],swissDeductions:s.swissDeductions||{},ledger:s.ledger||[],loans:s.loans||SEED_LOANS,expenseCategories:s.expenseCategories||[...DEFAULT_EXP_CATEGORIES],catExpenses:s.catExpenses||[],cardOrder:s.cardOrder||[],cards:s.cards||DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE,...(s.oilChange||{})},descPresets:s.descPresets||[],waedaeLabel:s.waedaeLabel||"외대",accountLabels:{"국민":"계좌1","농협":"계좌2",...(s.accountLabels||{})}};
 }
 
 function App(){
@@ -280,11 +294,19 @@ function App(){
     setDragTabOrderKeys(null);
   };
   const renameTab=(id,label)=>upd((p)=>({...p,tabLabels:{...(p.tabLabels||{}),[id]:label}}));
-  const [newEnt,setNewEnt]=useState({date:"",type:"expense",desc:"",amount:"",payMethod:"현금",category:""});
+  const [newEnt,setNewEnt]=useState(()=>({date:ymd(today.getFullYear(),today.getMonth()+1,today.getDate()),type:"expense",desc:"",amount:"",payMethod:"현금",category:"",account:"국민",toAccount:"농협"}));
   const [catDropdownOpen,setCatDropdownOpen]=useState(false);
   const [catQuickAdd,setCatQuickAdd]=useState("");
   const [newCatName,setNewCatName]=useState("");
+  const [descDropdownOpen,setDescDropdownOpen]=useState(false);
+  const [descQuickAdd,setDescQuickAdd]=useState("");
+  const descWrapRef=useRef(null);
 
+  const storeRef=useRef(null);
+  useEffect(()=>{storeRef.current=store;},[store]);
+  const saveStateTimerRef=useRef(null);
+
+  // 공유용: 클라우드 동기화 없이 이 브라우저에만 저장합니다.
   useEffect(()=>{
     try{
       const raw=localStorage.getItem(STORAGE_KEY);
@@ -297,9 +319,18 @@ function App(){
     try{
       localStorage.setItem(STORAGE_KEY,JSON.stringify(next));
       setSaveState("saved");
-      setTimeout(()=>setSaveState("idle"),1000);
-    }catch(e){setSaveState("error");}
+    }catch(e){
+      setSaveState("error");
+    }
+    if(saveStateTimerRef.current) clearTimeout(saveStateTimerRef.current);
+    saveStateTimerRef.current=setTimeout(()=>setSaveState("idle"),1000);
   },[]);
+
+  // "지금 저장" 버튼: 로컬 저장뿐이라 변경 즉시 이미 저장돼 있지만, 눌렀을 때도
+  // "저장 중…→저장됨" 표시가 뜨도록 현재 상태를 한 번 더 저장합니다.
+  const saveNow=useCallback(()=>{
+    if(storeRef.current) persist(storeRef.current);
+  },[persist]);
 
   const upd=(fn)=>setStore((p)=>{const n=fn(p);persist(n);return n;});
   const monthStr=mk(year,month);
@@ -315,6 +346,33 @@ function App(){
   };
   const closeDay=()=>{setSel(null);setDAm([]);setDPm([]);setDFuel("");setMemoInput("");};
   const colorFor=(r)=>ROUTE_COLORS[r]||EXTRA_ROUTE_COLORS[r]||(store?.routeColors||{})[r]||EXTRA_COLOR;
+  // "외대"는 내부 키는 고정이지만 화면에 보이는 이름은 사용자가 자유롭게 바꿀 수 있음(과거 달력 데이터는 그대로 "외대"로 저장됨)
+  const waedaeLabel=store?.waedaeLabel||"외대";
+  const dispRoute=(r)=>r==="외대"?waedaeLabel:r;
+  // 외대 이름 변경 입력란: 타이핑 중엔 로컬 draft만 바꾸고, 포커스를 벗어날 때 한 번만 저장함.
+  // (글자 하나 지울 때마다 바로 upd()로 저장해버리면, 빈 문자열이 되는 순간 위 waedaeLabel이
+  //  "외대"로 되돌아가 버려 지우기가 안 되는 것처럼 보이고, 과도하게 잦은 저장을 유발함)
+  const [waedaeLabelDraft,setWaedaeLabelDraft]=useState(null);
+  const waedaeLabelInputValue=waedaeLabelDraft!==null?waedaeLabelDraft:(store?.waedaeLabel??"외대");
+  const commitWaedaeLabel=()=>{
+    if(waedaeLabelDraft===null) return;
+    const v=waedaeLabelDraft.trim()?waedaeLabelDraft:"외대";
+    upd((p)=>({...p,waedaeLabel:v}));
+    setWaedaeLabelDraft(null);
+  };
+
+  // 공유용: 지출입장부/카드지출의 두 계좌는 내부 키("국민"/"농협")는 고정이지만, 화면에 보이는
+  // 이름은 "계좌1"/"계좌2"를 기본값으로 하여 누구나 자기 상황에 맞게 바꿔 쓸 수 있음 (waedaeLabel과 동일한 방식)
+  const accountLabels=store?.accountLabels||{"국민":"계좌1","농협":"계좌2"};
+  const dispAccount=(k)=>accountLabels[k]||k;
+  const [acctLabelDraft,setAcctLabelDraft]=useState({});
+  const acctLabelInputValue=(k)=>acctLabelDraft[k]!==undefined?acctLabelDraft[k]:accountLabels[k];
+  const commitAcctLabel=(k)=>{
+    if(acctLabelDraft[k]===undefined) return;
+    const v=acctLabelDraft[k].trim()?acctLabelDraft[k]:accountLabels[k];
+    upd((p)=>({...p,accountLabels:{...(p.accountLabels||accountLabels),[k]:v}}));
+    setAcctLabelDraft((prev)=>{const n={...prev};delete n[k];return n;});
+  };
   // 달력에서 고를 수 있는 노선 = 노선단가 탭에 실제로 살아있는(숨김 안 된) 노선 + 외대 + 편입된 노선 + 직접추가한 노선
   const pickableRoutes=useMemo(()=>{
     const hidden=store?.hiddenSwissRoutes||[];
@@ -323,7 +381,7 @@ function App(){
       ...(store?.promotedRoutes||[]),
       ...(store?.customPriceRoutes||[]).filter((cr)=>cr.name).map((cr)=>cr.name)
     ].filter((r)=>!hidden.includes(r));
-    return [...new Set(rest)];
+    return [...new Set(["외대",...rest])];
   },[store]);
   const ensureColor=(name)=>{
     if(!name||ROUTE_COLORS[name]||EXTRA_ROUTE_COLORS[name]||(store?.routeColors||{})[name]) return;
@@ -423,9 +481,10 @@ function App(){
     const promotedExtraTotal=promotedExtra.reduce((s,r)=>{const cnt=(stats.byP[r]?.am||0)+(stats.byP[r]?.pm||0);return s+(store.swissRevenue[r]||0)*cnt;},0);
     const customSwissTotal=(store.customSwissRoutes||[]).reduce((s,cr)=>{const cnt=(stats.byP[cr.name]?.am||0)+(stats.byP[cr.name]?.pm||0);return s+cr.price*cnt;},0);
     const routeTableTotal=swissRevTotal+promotedExtraTotal+customSwissTotal;
+    const waedaeTotal=(store.waedae.amPrice||0)*(stats.byP["외대"]?.am||0)+(store.waedae.pmPrice||0)*(stats.byP["외대"]?.pm||0);
     const extraRoutesTotal=(typeof EXTRA_ROUTES!=="undefined"?EXTRA_ROUTES:[]).reduce((s,r)=>s+(store.swissRevenue[r]||0)*((stats.byP[r]?.am||0)+(stats.byP[r]?.pm||0)),0);
     const customPriceTotal=(store.customPriceRoutes||[]).reduce((s,cr)=>{const cnt=(stats.byP[cr.name]?.am||0)+(stats.byP[cr.name]?.pm||0);return s+(cr.price||0)*cnt;},0);
-    return routeTableTotal+extraRoutesTotal+customPriceTotal;
+    return routeTableTotal+waedaeTotal+extraRoutesTotal+customPriceTotal;
   },[store,stats,swissRevTotal]);
 
   // 주유비 합계
@@ -577,7 +636,42 @@ function App(){
 
   // 장부
   const ledgerMonth=useMemo(()=>store?store.ledger.filter((e)=>e.date?.startsWith(monthStr)).sort((a,b)=>a.date.localeCompare(b.date)):[],[store,monthStr]);
-  const carryover=useMemo(()=>Number(ledgerMonth.find((e)=>e.type==="carryover")?.amount)||0,[ledgerMonth]);
+  // 이월 잔액 자동 계산 (통장별: 국민/농협). 해당 달·통장에 사용자가 직접 입력한 이월 항목이 있으면
+  // 그 값을 그대로 쓰고(수동 우선), 없으면 전달의 "이월+수입-지출" 결과를 자동으로 이어받습니다.
+  // account 필드가 없는 예전 기록은 전부 "국민"으로 취급합니다 (농협 구분은 이번에 새로 생긴 것이므로).
+  // 36개월(3년) 넘게 거슬러 올라가면 더 계산하지 않고 0으로 멈춥니다(무한 소급 방지). 특정 달에 그
+  // 통장 거래가 하나도 없다고 해서 바로 0으로 멈추지는 않습니다 - 그 전달들의 실제 잔액을 놓치게 되므로
+  // (예: 농협 통장은 이체가 있던 달에만 거래가 생기고, 그 외의 달엔 거래가 하나도 없을 수 있습니다).
+  function computeMonthFinance(y,m,account,depth=0){
+    const mstr=mk(y,m);
+    const monthLedger=(store?.ledger||[]).filter((e)=>e.date?.startsWith(mstr)&&(e.account||"국민")===account);
+    const manual=monthLedger.filter((e)=>e.type!=="carryover");
+    const explicitCarry=monthLedger.find((e)=>e.type==="carryover");
+    const charterIncome=account==="국민"?(store?.charters||[]).filter((c)=>c.date?.startsWith(mstr)&&c.paid).reduce((s,c)=>s+(Number(c.amount)||0),0):0;
+    const ledgerIncome=manual.filter((e)=>e.type==="income").reduce((s,e)=>s+(Number(e.amount)||0),0);
+    const income=charterIncome+ledgerIncome;
+    const cashExp=manual.filter((e)=>e.type==="expense"&&e.payMethod==="현금").reduce((s,e)=>s+(Number(e.amount)||0),0);
+    let carry;
+    if(explicitCarry){
+      carry=Number(explicitCarry.amount)||0;
+    }else if(depth>=36){
+      carry=0;
+    }else{
+      const py=m===1?y-1:y,pm=m===1?12:m-1;
+      carry=computeMonthFinance(py,pm,account,depth+1).ending;
+    }
+    return {carry,income,cashExp,ending:carry+income-cashExp};
+  }
+  const carryoverFor=useCallback((account)=>{
+    if(!store) return 0;
+    const explicit=ledgerMonth.find((e)=>e.type==="carryover"&&(e.account||"국민")===account);
+    if(explicit) return Number(explicit.amount)||0;
+    const py=month===1?year-1:year,pm=month===1?12:month-1;
+    return computeMonthFinance(py,pm,account,0).ending;
+  },[store,ledgerMonth,year,month]);
+  const carryoverKB=useMemo(()=>carryoverFor("국민"),[carryoverFor]);
+  const carryoverNH=useMemo(()=>carryoverFor("농협"),[carryoverFor]);
+  const carryover=useMemo(()=>carryoverKB+carryoverNH,[carryoverKB,carryoverNH]);
   const manualRows=useMemo(()=>ledgerMonth.filter((e)=>e.type!=="carryover"),[ledgerMonth]);
 
   const autoRows=useMemo(()=>{
@@ -595,12 +689,17 @@ function App(){
   },[store,monthStr,charterList]);
 
   const allRows=useMemo(()=>[...autoRows,...manualRows].sort((a,b)=>a.date.localeCompare(b.date)),[autoRows,manualRows]);
-  const totIncome=useMemo(()=>carryover+allRows.reduce((s,r)=>r.type==="income"?s+r.amount:s,0),[carryover,allRows]);
   const cashExpense=useMemo(()=>allRows.reduce((s,r)=>(r.type==="expense"&&r.payMethod==="현금")?s+r.amount:s,0),[allRows]);
   const incomeSum=useMemo(()=>allRows.reduce((s,r)=>r.type==="income"?s+r.amount:s,0),[allRows]);
   const totalExpense=useMemo(()=>allRows.reduce((s,r)=>r.type==="expense"?s+r.amount:s,0),[allRows]);
   const bankBalance=useMemo(()=>carryover+incomeSum-cashExpense,[carryover,incomeSum,cashExpense]);
-  const totExpense=useMemo(()=>allRows.reduce((s,r)=>r.type==="expense"?s+r.amount:s,0),[allRows]);
+  // 계좌이체(국민<->농협)는 실제 매출/지출이 아니라 내 통장 사이 이동일 뿐이므로,
+  // "이달의 수입/현금지출 합계"에서는 제외하고 순수 영업 현금흐름만 보여줍니다.
+  const realIncomeSum=useMemo(()=>allRows.reduce((s,r)=>(r.type==="income"&&r.category!=="계좌이체")?s+r.amount:s,0),[allRows]);
+  const realCashExpense=useMemo(()=>allRows.reduce((s,r)=>(r.type==="expense"&&r.payMethod==="현금"&&r.category!=="계좌이체")?s+r.amount:s,0),[allRows]);
+  // 통장별 이번 달 말 실제 잔액 (계좌이체 반영 포함 - 이체는 실제로 그 통장 잔액을 움직이므로)
+  const kbBalance=useMemo(()=>store?computeMonthFinance(year,month,"국민",0).ending:0,[store,year,month,ledgerMonth]);
+  const nhBalance=useMemo(()=>store?computeMonthFinance(year,month,"농협",0).ending:0,[store,year,month,ledgerMonth]);
 
   const cardTotals=useMemo(()=>{
     const t={};cardNames.forEach((c)=>{t[c]=0;});
@@ -621,13 +720,22 @@ function App(){
 
   const addEntry=()=>{
     const amt=Number(newEnt.amount)||0;if(!newEnt.date||amt===0) return;
-    upd((p)=>({...p,ledger:[...p.ledger,{id:uid(),date:newEnt.date,type:newEnt.type,desc:newEnt.desc,amount:amt,payMethod:newEnt.payMethod,category:newEnt.type==="expense"?(newEnt.category||"").trim():""}]}));
+    if(newEnt.type==="transfer"){
+      const from=newEnt.account||"국민",to=newEnt.toAccount||"농협";
+      if(from===to) return; // 같은 통장으로는 이체 의미 없음
+      upd((p)=>({...p,ledger:[...p.ledger,
+        {id:uid(),date:newEnt.date,type:"expense",desc:newEnt.desc||`${to}로 계좌이체`,amount:amt,payMethod:"현금",category:"계좌이체",account:from},
+        {id:uid(),date:newEnt.date,type:"income",desc:newEnt.desc||`${from}에서 계좌이체`,amount:amt,payMethod:"현금",category:"계좌이체",account:to}
+      ]}));
+    }else{
+      upd((p)=>({...p,ledger:[...p.ledger,{id:uid(),date:newEnt.date,type:newEnt.type,desc:newEnt.desc,amount:amt,payMethod:newEnt.type==="income"?"현금":newEnt.payMethod,category:newEnt.type==="expense"?(newEnt.category||"").trim():"",account:newEnt.account||"국민"}]}));
+    }
     setNewEnt({...newEnt,desc:"",amount:"",category:""});
   };
-  const setCarryover=(v)=>{
+  const setCarryoverFor=(account,v)=>{
     const amt=Number(v)||0;
-    upd((p)=>{const ex=p.ledger.find((e)=>e.date?.startsWith(monthStr)&&e.type==="carryover");
-      const ledger=ex?p.ledger.map((e)=>e.id===ex.id?{...e,amount:amt}:e):[...p.ledger,{id:uid(),date:ymd(year,month,1),type:"carryover",desc:"전월이월",amount:amt,payMethod:"자동"}];
+    upd((p)=>{const ex=p.ledger.find((e)=>e.date?.startsWith(monthStr)&&e.type==="carryover"&&(e.account||"국민")===account);
+      const ledger=ex?p.ledger.map((e)=>e.id===ex.id?{...e,amount:amt}:e):[...p.ledger,{id:uid(),date:ymd(year,month,1),type:"carryover",desc:"전월이월",amount:amt,payMethod:"자동",account}];
       return {...p,ledger};});
   };
   const updOilChange=(field,v)=>{
@@ -652,6 +760,17 @@ function App(){
     setNewEnt((prev)=>({...prev,category:v}));
     setCatQuickAdd("");
     setCatDropdownOpen(false);
+  };
+  const delDescPreset=(name)=>upd((p)=>({...p,descPresets:(p.descPresets||[]).filter((x)=>x!==name)}));
+  const addQuickDesc=()=>{
+    const v=descQuickAdd.trim();
+    if(!v) return;
+    if(!(store.descPresets||[]).includes(v)){
+      upd((p)=>({...p,descPresets:[...(p.descPresets||[]),v]}));
+    }
+    setNewEnt((prev)=>({...prev,desc:v}));
+    setDescQuickAdd("");
+    setDescDropdownOpen(false);
   };
   const catColor=(name)=>{
     const list=store?.expenseCategories||DEFAULT_EXP_CATEGORIES;
@@ -690,11 +809,14 @@ function App(){
 
   return (
     <div style={S.app}>
-      <style>{`*{box-sizing:border-box;}.bc:hover{background:#eef1f8!important;cursor:pointer;}.ptag{transition:transform .08s,background .15s;}.ptag:active{transform:scale(.96);}::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#b0bad0;border-radius:4px;}table.T{width:100%;border-collapse:collapse;}table.T th,table.T td{padding:7px 6px;font-size:12.5px;border-bottom:1px solid #d0d8e8;vertical-align:middle;}table.T th{color:#1a2535;font-weight:700;text-align:left;}table.T input[type=number],table.T input[type=text],table.T input[type=date]{background:#eef1f8;border:1px solid #b8c4d8;border-radius:6px;color:#0d1520;font-weight:500;padding:5px 7px;font-size:12.5px;width:100%;outline:none;}input.dateOverlay::-webkit-calendar-picker-indicator{position:absolute;left:0;top:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;}.ra{background:rgba(59,110,143,.06);}.rc{background:rgba(47,143,111,.06);}@media(max-width:600px){.cal-outer{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 8px 8px 0;}.cal-wkrow{display:grid!important;grid-template-columns:repeat(7,90px)!important;width:630px!important;min-width:630px!important;margin-bottom:4px;gap:3px!important;}.cal-grid{display:grid!important;grid-template-columns:repeat(7,90px)!important;width:630px;gap:3px!important;}.cal-cell{min-height:90px!important;width:90px!important;padding:5px 4px!important;border-radius:7px!important;box-sizing:border-box!important;}.cal-dnum{font-size:12px!important;font-weight:700!important;}.cal-tag{font-size:10px!important;padding:2px 4px!important;border-radius:4px!important;font-weight:700!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important;}}table.T.rt{table-layout:fixed;}table.T.rt th:first-child,table.T.rt td:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}@media(max-width:600px){table.T.rt th.cCnt{width:34px!important;padding-left:2px!important;padding-right:2px!important;}table.T.rt th.cPrice{width:72px!important;}table.T.rt th.cPrice2{width:72px!important;}table.T.rt th.cTotal{width:58px!important;}table.T.rt th.cX{width:20px!important;}table.T.rt td:first-child{font-size:12px!important;}}`}</style>
+      <style>{`*{box-sizing:border-box;}.bc:hover{background:#eef1f8!important;cursor:pointer;}.ptag{transition:transform .08s,background .15s;}.ptag:active{transform:scale(.96);}::-webkit-scrollbar{width:7px;height:7px;}::-webkit-scrollbar-thumb{background:#b0bad0;border-radius:4px;}table.T{width:100%;border-collapse:collapse;}table.T th,table.T td{padding:7px 6px;font-size:12.5px;border-bottom:1px solid #d0d8e8;vertical-align:middle;}table.T th{color:#1a2535;font-weight:700;text-align:left;}table.T input[type=number],table.T input[type=text],table.T input[type=date]{background:#eef1f8;border:1px solid #b8c4d8;border-radius:6px;color:#0d1520;font-weight:500;padding:5px 7px;font-size:12.5px;width:100%;outline:none;}input.dateOverlay::-webkit-calendar-picker-indicator{position:absolute;left:0;top:0;width:100%;height:100%;margin:0;padding:0;opacity:0;cursor:pointer;}.ra{background:rgba(59,110,143,.06);}.rc{background:rgba(47,143,111,.06);}input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}input[type=number]{-moz-appearance:textfield;}@media(max-width:600px){.cal-outer{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 8px 8px 0;}.cal-wkrow{display:grid!important;grid-template-columns:repeat(7,90px)!important;width:630px!important;min-width:630px!important;margin-bottom:4px;gap:3px!important;}.cal-grid{display:grid!important;grid-template-columns:repeat(7,90px)!important;width:630px;gap:3px!important;}.cal-cell{min-height:90px!important;width:90px!important;padding:5px 4px!important;border-radius:7px!important;box-sizing:border-box!important;}.cal-dnum{font-size:12px!important;font-weight:700!important;}.cal-tag{font-size:10px!important;padding:2px 4px!important;border-radius:4px!important;font-weight:700!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important;}}table.T.rt{table-layout:fixed;}table.T.rt th:first-child,table.T.rt td:first-child{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}@media(max-width:600px){table.T.rt th.cCnt{width:34px!important;padding-left:2px!important;padding-right:2px!important;}table.T.rt th.cPrice{width:72px!important;}table.T.rt th.cPrice2{width:72px!important;}table.T.rt th.cTotal{width:58px!important;}table.T.rt th.cX{width:20px!important;}table.T.rt td:first-child{font-size:12px!important;}}`}</style>
 
       <div style={S.header}>
         <div><div style={S.title}>버스 운행 일정표</div></div>
-        <span style={{fontSize:12,color:"#6fae8a"}}>{saveState==="saving"?"저장 중…":saveState==="saved"?"저장됨 ✓":saveState==="error"?"저장 실패":""}</span>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:12,color:saveState==="error"?"#d03030":"#6fae8a"}}>{saveState==="saving"?"저장 중…":saveState==="saved"?"저장됨 ✓":saveState==="error"?"저장 실패":""}</span>
+          <button style={{border:"1px solid #3b6e8f",background:"transparent",color:"#3b6e8f",borderRadius:7,padding:"5px 10px",fontSize:12,cursor:"pointer",fontWeight:600}} onClick={saveNow}>지금 저장</button>
+        </div>
       </div>
 
       <div style={S.tabRow}>
@@ -749,12 +871,12 @@ function App(){
                 {(displayDd.in||displayDd.out)&&<div style={S.clkRow}><span style={{color:"#6fae8a"}}>{displayDd.in||"-"}</span><span style={{color:"#4a5266"}}>/</span><span style={{color:"#d99a6f"}}>{displayDd.out||"-"}</span></div>}
                 <div style={S.splitWrap}>
                   <div style={S.splitCol}>
-                    {displayDd.am.slice(0,3).map((r,idx)=><span key={idx} style={{...S.mTag,background:colorFor(r)+"22",color:colorFor(r),borderColor:colorFor(r)}}>{r}</span>)}
+                    {displayDd.am.slice(0,3).map((r,idx)=><span key={idx} style={{...S.mTag,background:colorFor(r)+"22",color:colorFor(r),borderColor:colorFor(r)}}>{dispRoute(r)}</span>)}
                     {displayDd.am.length>3&&<span style={{fontSize:8.5,color:"#7a8295"}}>+{displayDd.am.length-3}</span>}
                   </div>
                   <div style={S.splitDiv}/>
                   <div style={S.splitCol}>
-                    {displayDd.pm.slice(0,3).map((r,idx)=><span key={idx} style={{...S.mTag,background:colorFor(r)+"22",color:colorFor(r),borderColor:colorFor(r)}}>{r}</span>)}
+                    {displayDd.pm.slice(0,3).map((r,idx)=><span key={idx} style={{...S.mTag,background:colorFor(r)+"22",color:colorFor(r),borderColor:colorFor(r)}}>{dispRoute(r)}</span>)}
                     {displayDd.pm.length>3&&<span style={{fontSize:8.5,color:"#7a8295"}}>+{displayDd.pm.length-3}</span>}
                     {charterMemos.map((m,idx)=><div key={"memo"+idx} style={{fontSize:8.5,color:"#1a2535",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>{m}</div>)}
                   </div>
@@ -865,6 +987,7 @@ function App(){
               </table>
             </div>
           )}
+          {/* 공유용: 외대 오전/오후 단가 항목은 노출하지 않음 (합계 계산에는 그대로 포함됨) */}
           <>
             <div style={S.totalBar}>스위스 매출 합계 (이번 달) : <b style={{color:"#6fae8a",fontSize:16,marginLeft:8}}>{fmt(swissMonthTotal)}원</b></div>
             <div style={{...S.totalBar,paddingTop:0}}>
@@ -1147,9 +1270,25 @@ function App(){
       {/* 지출입 장부 */}
       {tab==="ledger"&&(
         <div style={S.panel}>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:10,padding:"8px 0",borderBottom:"1px solid #d0d8e8"}}>
+            {["국민","농협"].map((k)=>(
+              <div key={k} style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:12,color:"#7a8295"}}>계좌명:</span>
+                <input type="text" lang="ko" style={{...S.ti,width:90,fontSize:12.5}} value={acctLabelInputValue(k)}
+                  onChange={(e)=>setAcctLabelDraft((p)=>({...p,[k]:e.target.value}))}
+                  onBlur={()=>commitAcctLabel(k)}
+                  onKeyDown={(e)=>{if(e.key==="Enter"&&!e.nativeEvent.isComposing) e.target.blur();}}/>
+              </div>
+            ))}
+          </div>
           <div style={S.carryRow}>
-            <span style={{fontSize:13,color:"#9aa3b5"}}>전월 이월금액</span>
-            <input style={S.carryInput} type="number" value={carryover||""} placeholder="0" onChange={(e)=>setCarryover(e.target.value)}/>
+            <span style={{fontSize:13,color:"#9aa3b5"}}>전월 이월금액 ({dispAccount("국민")})</span>
+            <input style={S.carryInput} type="text" inputMode="numeric" value={fmt(carryoverKB)} placeholder="0" onChange={(e)=>setCarryoverFor("국민",e.target.value.replace(/[^0-9]/g,""))}/>
+            <span style={{fontSize:12,color:"#7a8295"}}>원</span>
+          </div>
+          <div style={S.carryRow}>
+            <span style={{fontSize:13,color:"#9aa3b5"}}>전월 이월금액 ({dispAccount("농협")})</span>
+            <input style={S.carryInput} type="text" inputMode="numeric" value={fmt(carryoverNH)} placeholder="0" onChange={(e)=>setCarryoverFor("농협",e.target.value.replace(/[^0-9]/g,""))}/>
             <span style={{fontSize:12,color:"#7a8295"}}>원</span>
           </div>
           <div style={S.oilRow}>
@@ -1179,7 +1318,7 @@ function App(){
                   </td>
                   <td>
                     {r.payMethod==="자동"?<span style={{color:"#5e6678",fontSize:11}}>자동</span>
-                      :r.payMethod==="현금"?<span style={S.badge}>현금</span>
+                      :r.payMethod==="현금"?<span style={S.badge}>현금·{dispAccount(r.account||"국민")}</span>
                       :<span style={{...S.badge,background:"#1e3d2f",color:"#6fae8a"}}>{r.payMethod}</span>}
                   </td>
                   <td style={{textAlign:"right",color:r.type==="income"?"#6fae8a":"#5e6678"}}>{r.type==="income"?fmt(r.amount):"-"}</td>
@@ -1192,20 +1331,39 @@ function App(){
 
           {/* 새 항목 입력 */}
           <div style={S.entryForm}>
-            <input style={S.ef} type="date" value={newEnt.date} onChange={(e)=>setNewEnt({...newEnt,date:e.target.value})}/>
-            <select style={S.ef} value={newEnt.type} onChange={(e)=>setNewEnt({...newEnt,type:e.target.value})}>
+            <input style={{...S.ef,flexShrink:0}} type="date" value={newEnt.date} onChange={(e)=>setNewEnt({...newEnt,date:e.target.value})}/>
+            <select style={{...S.ef,flexShrink:0}} value={newEnt.type} onChange={(e)=>setNewEnt({...newEnt,type:e.target.value})}>
               <option value="income">수입</option>
               <option value="expense">지출</option>
+              <option value="transfer">계좌이체</option>
             </select>
             {newEnt.type==="expense"&&(
-              <select style={S.ef} value={newEnt.payMethod} onChange={(e)=>setNewEnt({...newEnt,payMethod:e.target.value})}>
+              <select style={{...S.ef,flexShrink:0}} value={newEnt.payMethod} onChange={(e)=>setNewEnt({...newEnt,payMethod:e.target.value})}>
                 <option value="현금">현금</option>
                 {cardNames.map((m)=><option key={m} value={m}>{m}</option>)}
               </select>
             )}
+            {newEnt.type==="transfer"?(
+              <>
+                <select style={{...S.ef,flexShrink:0}} value={newEnt.account} onChange={(e)=>setNewEnt({...newEnt,account:e.target.value})}>
+                  <option value="국민">{dispAccount("국민")}에서</option>
+                  <option value="농협">{dispAccount("농협")}에서</option>
+                </select>
+                <span style={{fontSize:12,color:"#9aa3b5"}}>→</span>
+                <select style={{...S.ef,flexShrink:0}} value={newEnt.toAccount} onChange={(e)=>setNewEnt({...newEnt,toAccount:e.target.value})}>
+                  <option value="농협">{dispAccount("농협")}으로</option>
+                  <option value="국민">{dispAccount("국민")}으로</option>
+                </select>
+              </>
+            ):((newEnt.type==="income"||newEnt.payMethod==="현금")&&(
+              <select style={{...S.ef,flexShrink:0}} value={newEnt.account} onChange={(e)=>setNewEnt({...newEnt,account:e.target.value})}>
+                <option value="국민">{dispAccount("국민")}</option>
+                <option value="농협">{dispAccount("농협")}</option>
+              </select>
+            ))}
             {newEnt.type==="expense"&&(
-              <div style={{position:"relative"}}>
-                <button type="button" style={{...S.ef,width:150,textAlign:"left",background:"#fff",cursor:"pointer",color:newEnt.category?"inherit":"#9aa3b5"}} onClick={()=>setCatDropdownOpen((v)=>!v)}>
+              <div style={{position:"relative",flexShrink:0}}>
+                <button type="button" style={{...S.ef,width:150,textAlign:"left",cursor:"pointer",color:newEnt.category?"inherit":"#9aa3b5"}} onClick={()=>setCatDropdownOpen((v)=>!v)}>
                   {newEnt.category||"카테고리(선택,직접입력)"}
                 </button>
                 {catDropdownOpen&&(
@@ -1228,23 +1386,42 @@ function App(){
                 )}
               </div>
             )}
-            <input style={{...S.ef,flex:1,minWidth:90}} type="text" placeholder="적요 (한/영키로 한글전환)" lang="ko" value={newEnt.desc} onChange={(e)=>setNewEnt({...newEnt,desc:e.target.value})}/>
-            <input style={{...S.ef,width:100}} type="number" placeholder="금액" value={newEnt.amount} onChange={(e)=>setNewEnt({...newEnt,amount:e.target.value})}/>
-            <button style={S.addBtn} onClick={addEntry}>추가</button>
+            <div ref={descWrapRef} style={{position:"relative",flex:1,minWidth:90,display:"flex"}}>
+              <input style={{...S.ef,flex:1,minWidth:0}} type="text" placeholder="적요 (한/영키로 한글전환)" lang="ko" value={newEnt.desc} onChange={(e)=>setNewEnt({...newEnt,desc:e.target.value})}
+                onFocus={()=>setDescDropdownOpen(true)}
+                onBlur={(e)=>{if(!descWrapRef.current||!descWrapRef.current.contains(e.relatedTarget)) setDescDropdownOpen(false);}}/>
+              {descDropdownOpen&&(
+                <div style={{position:"absolute",top:"100%",left:0,marginTop:4,zIndex:30,background:"#fff",border:"1px solid #c8d0e0",borderRadius:8,padding:8,minWidth:190,boxShadow:"0 4px 14px rgba(0,0,0,.15)"}}>
+                  {(store.descPresets||[]).length===0&&<div style={{fontSize:12,color:"#9aa3b5",padding:"4px 2px"}}>적요 항목 없음</div>}
+                  {(store.descPresets||[]).map((d)=>(
+                    <div key={d} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 4px",borderRadius:5}}>
+                      <span onMouseDown={(e)=>e.preventDefault()} onClick={()=>{setNewEnt({...newEnt,desc:d});setDescDropdownOpen(false);}} style={{flex:1,fontSize:12.5,cursor:"pointer",fontWeight:newEnt.desc===d?700:400}}>{d}</span>
+                      <button type="button" onClick={(e)=>{e.stopPropagation();delDescPreset(d);}} style={{...S.rBtn,fontSize:10,marginLeft:6}}>✕</button>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",gap:4,marginTop:6,borderTop:"1px solid #eee",paddingTop:6}}>
+                    <input style={{...S.ti,flex:1,fontSize:12}} type="text" lang="ko" placeholder="새 적요" value={descQuickAdd} onChange={(e)=>setDescQuickAdd(e.target.value)} onKeyDown={(e)=>{if(e.key==="Enter"&&!e.nativeEvent.isComposing) addQuickDesc();}}/>
+                    <button type="button" style={S.addBtn} onClick={addQuickDesc}>추가</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <input style={{...S.ef,width:100,flexShrink:0}} type="number" placeholder="금액" value={newEnt.amount} onChange={(e)=>setNewEnt({...newEnt,amount:e.target.value})}/>
+            <button style={{...S.addBtn,flexShrink:0}} onClick={addEntry}>추가</button>
           </div>
 
           {/* 요약 */}
           <div style={S.summary}>
             <div style={{...S.sRow,fontWeight:700,fontSize:14,borderBottom:"2px solid #c8d4e8",paddingBottom:8,marginBottom:4}}>
-              <span>이월 잔액</span><span>{fmt(carryover)}원</span>
+              <span>이월 잔액 ({dispAccount("국민")}+{dispAccount("농협")})</span><span>{fmt(carryover)}원</span>
             </div>
             <div style={{...S.sRow,fontSize:13,color:"#1a6b3a",padding:"6px 0"}}>
-              <span>이달의 수입 합계</span>
-              <span style={{fontWeight:600}}>+ {fmt(incomeSum)}원</span>
+              <span>이달의 수입 합계 <span style={{fontSize:10.5,color:"#7a8295",fontWeight:400}}>(계좌이체 제외)</span></span>
+              <span style={{fontWeight:600}}>+ {fmt(realIncomeSum)}원</span>
             </div>
             <div style={{...S.sRow,fontSize:13,color:"#b03030",padding:"6px 0"}}>
-              <span>이달의 현금지출 합계</span>
-              <span style={{fontWeight:600}}>- {fmt(cashExpense)}원</span>
+              <span>이달의 현금지출 합계 <span style={{fontSize:10.5,color:"#7a8295",fontWeight:400}}>(계좌이체 제외)</span></span>
+              <span style={{fontWeight:600}}>- {fmt(realCashExpense)}원</span>
             </div>
             <div style={{fontSize:13,color:"#2f6fb0",padding:"6px 0"}}>
               <div style={{display:"flex",justifyContent:"space-between"}}>
@@ -1263,9 +1440,19 @@ function App(){
                 })}
               </div>
             </div>
+            <div style={{marginTop:4,padding:"8px 0",borderTop:"1px solid #d0d8e8"}}>
+              <div style={{...S.sRow,fontSize:13,fontWeight:600,color:"#1a2535"}}>
+                <span>{dispAccount("국민")} 잔액</span>
+                <span style={{color:kbBalance>=0?"#1a5c30":"#9b1c1c"}}>{fmt(kbBalance)}원</span>
+              </div>
+              <div style={{...S.sRow,fontSize:13,fontWeight:600,color:"#1a2535",marginTop:4}}>
+                <span>{dispAccount("농협")} 잔액</span>
+                <span style={{color:nhBalance>=0?"#1a5c30":"#9b1c1c"}}>{fmt(nhBalance)}원</span>
+              </div>
+            </div>
             <div style={{...S.sRow,marginTop:4,fontSize:13,fontWeight:700,color:"#1a2535",borderTop:"1px solid #d0d8e8",paddingTop:8}}>
-              <span>이달의 전체 수입 - 지출</span>
-              <span style={{color:(carryover+incomeSum-cashExpense)>=0?"#1a5c30":"#9b1c1c"}}>{fmt(carryover+incomeSum-cashExpense)}원</span>
+              <span>이달의 전체 수입 - 지출 (합계)</span>
+              <span style={{color:(kbBalance+nhBalance)>=0?"#1a5c30":"#9b1c1c"}}>{fmt(kbBalance+nhBalance)}원</span>
             </div>
             <div style={{fontSize:11,color:"#4a5568",marginTop:6}}>
               ※ 스위스 운행매출은 매월 20일 입금 후 직접 기입
@@ -1285,7 +1472,7 @@ function App(){
             :<div style={{display:"flex",flexDirection:"column",gap:10}}>
               {stats.counts.map(([r,cnt])=>(
                 <div key={r} style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:90,fontSize:12.5,color:"#1a2535",fontWeight:700,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}} title={r}>{r}</div>
+                  <div style={{width:90,fontSize:12.5,color:"#1a2535",fontWeight:700,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}} title={dispRoute(r)}>{dispRoute(r)}</div>
                   <div style={{flex:1,height:12,background:"#1f2430",borderRadius:6,overflow:"hidden"}}>
                     <div style={{width:`${(cnt/(stats.counts[0][1]||1))*100}%`,height:"100%",background:ROUTE_COLORS[r]||"#5a6478",transition:"width .4s"}}/>
                   </div>
@@ -1300,7 +1487,7 @@ function App(){
       {/* 노선 단가 */}
       {tab==="prices"&&(
         <div style={S.panel}>
-          <div style={S.hint}>노선별 단가(이미 공제 반영된 실수령 기준)를 관리하는 곳입니다. (외부·공휴일은 별도 관리) 오른쪽 ✕로 삭제할 수 있습니다. 편입된 노선명을 클릭하면 아래 추가노선 목록으로 되돌릴 수 있습니다.</div>
+          <div style={S.hint}>노선별 단가(이미 공제 반영된 실수령 기준)를 관리하는 곳입니다. (외부·{waedaeLabel}·공휴일은 별도 관리) 오른쪽 ✕로 삭제할 수 있습니다. 편입된 노선명을 클릭하면 아래 추가노선 목록으로 되돌릴 수 있습니다.</div>
           <table className="T rt">
             <thead><tr><th>노선</th><th className="cPrice" style={{width:130}}>단가 (원)</th><th className="cX" style={{width:24}}></th></tr></thead>
             <tbody>
@@ -1366,13 +1553,41 @@ function App(){
             ))}
             <button style={S.addRowBtn} onClick={()=>upd((p)=>({...p,customPriceRoutes:[...(p.customPriceRoutes||[]),{id:uid(),name:"",price:0,deduction:0}]}))}>+ 노선 추가</button>
           </div>
+          <div style={{...S.settleBox,marginTop:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+              <input type="text" lang="ko" value={waedaeLabelInputValue}
+                onChange={(e)=>setWaedaeLabelDraft(e.target.value)}
+                onBlur={commitWaedaeLabel}
+                onKeyDown={(e)=>{if(e.key==="Enter"&&!e.nativeEvent.isComposing) e.target.blur();}}
+                style={{...S.settleTitle,margin:0,border:"1px solid #c8d0e0",borderRadius:6,padding:"4px 8px",background:"#fff",width:140}}/>
+              <span style={{fontSize:11,color:"#7a8295"}}>(오전 / 오후 단가 별도, 클릭해서 이름 변경 가능)</span>
+            </div>
+            <div style={{fontSize:11,color:"#6b7585",marginBottom:8}}>달력에서 "{waedaeLabel}"를 선택한 횟수만큼 자동으로 계산되어 스위스매출에 반영됩니다.</div>
+            <table className="T">
+              <thead><tr><th></th><th style={{width:110}}>단가</th><th style={{width:60,textAlign:"center"}}>횟수</th><th style={{width:100,textAlign:"right"}}>합계</th></tr></thead>
+              <tbody>
+                {[["오전 (왼쪽 칸)","amPrice","am"],["오후 (오른쪽 칸)","pmPrice","pm"]].map(([lbl,pf,period])=>{
+                  const cnt=stats.byP["외대"]?.[period]||0;
+                  const price=store.waedae[pf]||0;
+                  return (
+                    <tr key={lbl}>
+                      <td>{lbl}</td>
+                      <td><input type="text" inputMode="numeric" value={fmt(price)} onChange={(e)=>upd((p)=>({...p,waedae:{...p.waedae,[pf]:Number(e.target.value.replace(/[^0-9]/g,""))||0}}))}/></td>
+                      <td style={{textAlign:"center",color:"#9aa3b5"}}>{cnt}</td>
+                      <td style={{textAlign:"right",fontWeight:600,color:cnt>0?"#6fae8a":"#5e6678"}}>{fmt(price*cnt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {/* 대출 관리 */}
       {tab==="loans"&&(
         <div style={S.panel}>
-          <div style={S.hint}>조병용 관련 대출 / 차용 건 관리 (관리자 전용).</div>
+          <div style={S.hint}>대출 / 차용 건을 직접 추가해서 관리할 수 있습니다.</div>
           <div style={{marginBottom:12}}>
             {!confirmDateConvert
               ?<button style={S.addRowBtn} onClick={()=>setConfirmDateConvert(true)}>📅 메모/예정일 날짜 형식 일괄 변환 (2025/09/01 → 2025년 09월 01일)</button>
@@ -1455,7 +1670,7 @@ function App(){
                     {pickableRoutes.map((r)=>{
                       const on=draft.includes(r);
                       const c=colorFor(r);
-                      return <button key={r} className="ptag" style={{border:"1px solid",borderRadius:5,padding:"3px 7px",fontSize:11,cursor:"pointer",background:on?c:"#fff",borderColor:c,color:on?"#fff":c}} onClick={()=>toggleR(period,r)}>{r}</button>;
+                      return <button key={r} className="ptag" style={{border:"1px solid",borderRadius:5,padding:"3px 7px",fontSize:11,cursor:"pointer",background:on?c:"#fff",borderColor:c,color:on?"#fff":c}} onClick={()=>toggleR(period,r)}>{dispRoute(r)}</button>;
                     })}
                   </div>
                 </details>
@@ -1468,7 +1683,7 @@ function App(){
                   {draft.map((item,idx)=>(
                     <div key={idx} style={{display:"flex",alignItems:"center",gap:7,background:"#171b24",border:"1px solid #262c39",borderRadius:7,padding:"4px 9px"}}>
                       <span style={{width:7,height:7,borderRadius:"50%",flexShrink:0,background:colorFor(item)}}/>
-                      <span style={{fontSize:12.5,flex:1,color:"#fff"}}>{item}</span>
+                      <span style={{fontSize:12.5,flex:1,color:"#fff"}}>{dispRoute(item)}</span>
                       <button style={S.rBtn} onClick={()=>setDraft((p)=>p.filter((_,i)=>i!==idx))}>✕</button>
                     </div>
                   ))}
@@ -1583,7 +1798,7 @@ const S={
     ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
   </script>
   <script>
-    if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(()=>{});}
+    if('serviceWorker' in navigator){navigator.serviceWorker.register(URL.createObjectURL(new Blob(["const CACHE='bus-v5';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request,{cache:'no-store'}).then(r=>{const c=r.clone();caches.open(CACHE).then(cache=>cache.put(e.request,c));return r;}).catch(()=>caches.match(e.request).then(h=>h||new Response('offline'))));});"],{type:'application/javascript'}))).catch(()=>{});}
     let dp;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;const b=document.getElementById('ib');if(b)b.style.display='flex';});
     function ia(){if(dp){dp.prompt();dp.userChoice.then(()=>{dp=null;document.getElementById('ib').style.display='none';});}}
     if(/iphone|ipad|ipod/i.test(navigator.userAgent)&&!window.navigator.standalone&&!sessionStorage.getItem('ih')){sessionStorage.setItem('ih','1');setTimeout(()=>alert('📱 아이폰:\n하단 공유버튼 → 홈 화면에 추가'),1500);}

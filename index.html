@@ -213,7 +213,7 @@ function makeSwissDed(){return Object.fromEntries(SWISS_DED_ITEMS.map((i)=>[i.ke
 
 const DEFAULT_OIL_CHANGE = {baseKm:0,cycleKm:30000};
 function initial(){
-  return {days:makeDays(),prices:{...DEFAULT_PRICES},deductions:{...DEFAULT_DEDUCTIONS},waedae:{...DEFAULT_WAEDAE},swissRevenue:makeSwissRev(),customSwissRoutes:[],hiddenSwissRoutes:[],routeColors:{},customSwissDedItems:[],hiddenSwissDedKeys:[],swissDedOrder:[],customPriceRoutes:[],promotedRoutes:[],permaDeletedRoutes:[],tabOrder:[],tabLabels:{},charters:SEED_CHARTERS,swissDeductions:{},ledger:[],loans:SEED_LOANS,expenseCategories:[...DEFAULT_EXP_CATEGORIES],catExpenses:[],cardOrder:[],cards:DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE},descPresets:[],waedaeLabel:"외대",accountLabels:{"국민":"계좌1","농협":"계좌2"}};
+  return {days:makeDays(),prices:{...DEFAULT_PRICES},deductions:{...DEFAULT_DEDUCTIONS},waedae:{...DEFAULT_WAEDAE},swissRevenue:makeSwissRev(),customSwissRoutes:[],hiddenSwissRoutes:[],routeColors:{},customSwissDedItems:[],hiddenSwissDedKeys:[],swissDedOrder:[],customPriceRoutes:[],promotedRoutes:[],permaDeletedRoutes:[],tabOrder:[],tabLabels:{},charters:SEED_CHARTERS,swissDeductions:{},ledger:[],loans:SEED_LOANS,expenseCategories:[...DEFAULT_EXP_CATEGORIES],catExpenses:[],cardOrder:[],cards:DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE},descPresets:[],waedaeLabel:"외대",accounts:["국민","농협"],hiddenAccounts:[],accountLabels:{"국민":"계좌1","농협":"계좌2"}};
 }
 function normalDay(d){
   if(!d) return {am:[],pm:[],in:"",out:"",fuel:""};
@@ -224,7 +224,7 @@ function normalStore(s){
   const days={};
   Object.entries(s.days||{}).forEach(([k,d])=>{days[k]=normalDay(d);});
   const promotedRoutes=[...new Set((s.promotedRoutes||[]).filter((r)=>!PRICED_ROUTES.includes(r)))];
-  return {days,prices:{...DEFAULT_PRICES,...(s.prices||{})},deductions:{...DEFAULT_DEDUCTIONS,...(s.deductions||{})},waedae:{...DEFAULT_WAEDAE,...(s.waedae||{})},swissRevenue:{...makeSwissRev(),...(s.swissRevenue||{})},customSwissRoutes:s.customSwissRoutes||[],hiddenSwissRoutes:s.hiddenSwissRoutes||[],routeColors:s.routeColors||{},customSwissDedItems:s.customSwissDedItems||[],hiddenSwissDedKeys:s.hiddenSwissDedKeys||[],swissDedOrder:s.swissDedOrder||[],customPriceRoutes:s.customPriceRoutes||[],promotedRoutes,permaDeletedRoutes:s.permaDeletedRoutes||[],tabOrder:s.tabOrder||[],tabLabels:s.tabLabels||{},charters:s.charters||[],swissDeductions:s.swissDeductions||{},ledger:s.ledger||[],loans:s.loans||SEED_LOANS,expenseCategories:s.expenseCategories||[...DEFAULT_EXP_CATEGORIES],catExpenses:s.catExpenses||[],cardOrder:s.cardOrder||[],cards:s.cards||DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE,...(s.oilChange||{})},descPresets:s.descPresets||[],waedaeLabel:s.waedaeLabel||"외대",accountLabels:{"국민":"계좌1","농협":"계좌2",...(s.accountLabels||{})}};
+  return {days,prices:{...DEFAULT_PRICES,...(s.prices||{})},deductions:{...DEFAULT_DEDUCTIONS,...(s.deductions||{})},waedae:{...DEFAULT_WAEDAE,...(s.waedae||{})},swissRevenue:{...makeSwissRev(),...(s.swissRevenue||{})},customSwissRoutes:s.customSwissRoutes||[],hiddenSwissRoutes:s.hiddenSwissRoutes||[],routeColors:s.routeColors||{},customSwissDedItems:s.customSwissDedItems||[],hiddenSwissDedKeys:s.hiddenSwissDedKeys||[],swissDedOrder:s.swissDedOrder||[],customPriceRoutes:s.customPriceRoutes||[],promotedRoutes,permaDeletedRoutes:s.permaDeletedRoutes||[],tabOrder:s.tabOrder||[],tabLabels:s.tabLabels||{},charters:s.charters||[],swissDeductions:s.swissDeductions||{},ledger:s.ledger||[],loans:s.loans||SEED_LOANS,expenseCategories:s.expenseCategories||[...DEFAULT_EXP_CATEGORIES],catExpenses:s.catExpenses||[],cardOrder:s.cardOrder||[],cards:s.cards||DEFAULT_CARDS.map((c)=>({...c})),oilChange:{...DEFAULT_OIL_CHANGE,...(s.oilChange||{})},descPresets:s.descPresets||[],waedaeLabel:s.waedaeLabel||"외대",accounts:s.accounts&&s.accounts.length?s.accounts:["국민","농협"],hiddenAccounts:s.hiddenAccounts||[],accountLabels:{"국민":"계좌1","농협":"계좌2",...(s.accountLabels||{})}};
 }
 
 function App(){
@@ -377,6 +377,19 @@ function App(){
     upd((p)=>({...p,accountLabels:{...(p.accountLabels||accountLabels),[k]:v}}));
     setAcctLabelDraft((prev)=>{const n={...prev};delete n[k];return n;});
   };
+  // 계좌는 기본 2개(국민/농협)지만 사용자가 자유롭게 추가할 수 있음. 계좌를 "삭제"해도 과거 거래
+  // 기록은 그대로 두고 hiddenAccounts에만 추가해 선택 목록/요약에서만 숨기는 방식으로 처리함
+  // (데이터 안전, 숨긴 계좌는 언제든 복원 가능).
+  const activeAccounts=(store?.accounts&&store.accounts.length?store.accounts:["국민","농협"]).filter((id)=>!(store?.hiddenAccounts||[]).includes(id));
+  const addAccount=()=>{
+    const id=uid();
+    upd((p)=>({...p,accounts:[...(p.accounts&&p.accounts.length?p.accounts:["국민","농협"]),id],accountLabels:{...(p.accountLabels||accountLabels),[id]:"새 계좌"}}));
+  };
+  const hideAccount=(id)=>{
+    if(activeAccounts.length<=1) return; // 계좌는 최소 1개 이상 남아있어야 함
+    upd((p)=>({...p,hiddenAccounts:[...(p.hiddenAccounts||[]),id]}));
+  };
+  const restoreAccount=(id)=>upd((p)=>({...p,hiddenAccounts:(p.hiddenAccounts||[]).filter((x)=>x!==id)}));
   // 달력에서 고를 수 있는 노선 = 노선단가 탭에 실제로 살아있는(숨김 안 된) 노선 + 외대 + 편입된 노선 + 직접추가한 노선
   const pickableRoutes=useMemo(()=>{
     const hidden=store?.hiddenSwissRoutes||[];
@@ -678,9 +691,7 @@ function App(){
     const py=month===1?year-1:year,pm=month===1?12:month-1;
     return computeMonthFinance(py,pm,account,0).ending;
   },[store,ledgerMonth,year,month]);
-  const carryoverKB=useMemo(()=>carryoverFor("국민"),[carryoverFor]);
-  const carryoverNH=useMemo(()=>carryoverFor("농협"),[carryoverFor]);
-  const carryover=useMemo(()=>carryoverKB+carryoverNH,[carryoverKB,carryoverNH]);
+  const carryover=useMemo(()=>activeAccounts.reduce((s,id)=>s+carryoverFor(id),0),[activeAccounts.join(","),carryoverFor]);
   const manualRows=useMemo(()=>ledgerMonth.filter((e)=>e.type!=="carryover"),[ledgerMonth]);
 
   const autoRows=useMemo(()=>{
@@ -707,8 +718,14 @@ function App(){
   const realIncomeSum=useMemo(()=>allRows.reduce((s,r)=>(r.type==="income"&&r.category!=="계좌이체")?s+r.amount:s,0),[allRows]);
   const realCashExpense=useMemo(()=>allRows.reduce((s,r)=>(r.type==="expense"&&r.payMethod==="현금"&&r.category!=="계좌이체")?s+r.amount:s,0),[allRows]);
   // 통장별 이번 달 말 실제 잔액 (계좌이체 반영 포함 - 이체는 실제로 그 통장 잔액을 움직이므로)
-  const kbBalance=useMemo(()=>store?computeMonthFinance(year,month,"국민",0).ending:0,[store,year,month,ledgerMonth]);
-  const nhBalance=useMemo(()=>store?computeMonthFinance(year,month,"농협",0).ending:0,[store,year,month,ledgerMonth]);
+  // 숨긴 계좌는 요약 화면에서 제외됩니다 (숨기기 전에 계좌이체로 잔액을 다른 계좌로 옮겨두는 것을 권장).
+  const accountBalances=useMemo(()=>activeAccounts.map((id)=>({id,balance:store?computeMonthFinance(year,month,id,0).ending:0})),[store,year,month,ledgerMonth,activeAccounts.join(",")]);
+  const totalBalance=useMemo(()=>accountBalances.reduce((s,a)=>s+a.balance,0),[accountBalances]);
+  // 새 항목 입력 폼에서 선택된 계좌가 숨겨지거나 사라진 경우를 대비한 안전한 기본값
+  const plainAccountVal=activeAccounts.includes(newEnt.account)?newEnt.account:(activeAccounts[0]||"국민");
+  const transferFromVal=activeAccounts.includes(newEnt.account)?newEnt.account:(activeAccounts[0]||"국민");
+  const transferToOptions=activeAccounts.filter((id)=>id!==transferFromVal);
+  const transferToVal=transferToOptions.includes(newEnt.toAccount)?newEnt.toAccount:(transferToOptions[0]||"농협");
 
   const cardTotals=useMemo(()=>{
     const t={};cardNames.forEach((c)=>{t[c]=0;});
@@ -730,14 +747,14 @@ function App(){
   const addEntry=()=>{
     const amt=Number(newEnt.amount)||0;if(!newEnt.date||amt===0) return;
     if(newEnt.type==="transfer"){
-      const from=newEnt.account||"국민",to=newEnt.toAccount||"농협";
-      if(from===to) return; // 같은 통장으로는 이체 의미 없음
+      const from=transferFromVal,to=transferToVal;
+      if(!from||!to||from===to) return; // 같은 통장으로는 이체 의미 없음
       upd((p)=>({...p,ledger:[...p.ledger,
-        {id:uid(),date:newEnt.date,type:"expense",desc:newEnt.desc||`${to}로 계좌이체`,amount:amt,payMethod:"현금",category:"계좌이체",account:from},
-        {id:uid(),date:newEnt.date,type:"income",desc:newEnt.desc||`${from}에서 계좌이체`,amount:amt,payMethod:"현금",category:"계좌이체",account:to}
+        {id:uid(),date:newEnt.date,type:"expense",desc:newEnt.desc||`${dispAccount(to)}로 계좌이체`,amount:amt,payMethod:"현금",category:"계좌이체",account:from},
+        {id:uid(),date:newEnt.date,type:"income",desc:newEnt.desc||`${dispAccount(from)}에서 계좌이체`,amount:amt,payMethod:"현금",category:"계좌이체",account:to}
       ]}));
     }else{
-      upd((p)=>({...p,ledger:[...p.ledger,{id:uid(),date:newEnt.date,type:newEnt.type,desc:newEnt.desc,amount:amt,payMethod:newEnt.type==="income"?"현금":newEnt.payMethod,category:newEnt.type==="expense"?(newEnt.category||"").trim():"",account:newEnt.account||"국민"}]}));
+      upd((p)=>({...p,ledger:[...p.ledger,{id:uid(),date:newEnt.date,type:newEnt.type,desc:newEnt.desc,amount:amt,payMethod:newEnt.type==="income"?"현금":newEnt.payMethod,category:newEnt.type==="expense"?(newEnt.category||"").trim():"",account:plainAccountVal}]}));
     }
     setNewEnt({...newEnt,desc:"",amount:"",category:""});
   };
@@ -1289,27 +1306,40 @@ function App(){
       {/* 지출입 장부 */}
       {tab==="ledger"&&(
         <div style={S.panel}>
-          <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:10,padding:"8px 0",borderBottom:"1px solid #d0d8e8"}}>
-            {["국민","농협"].map((k)=>(
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",marginBottom:10,padding:"8px 0",borderBottom:"1px solid #d0d8e8"}}>
+            {activeAccounts.map((k)=>(
               <div key={k} style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:12,color:"#7a8295"}}>계좌명:</span>
                 <input type="text" lang="ko" style={{...S.ti,width:90,fontSize:12.5}} value={acctLabelInputValue(k)}
                   onChange={(e)=>setAcctLabelDraft((p)=>({...p,[k]:e.target.value}))}
                   onBlur={()=>commitAcctLabel(k)}
                   onKeyDown={(e)=>{if(e.key==="Enter"&&!e.nativeEvent.isComposing) e.target.blur();}}/>
+                {activeAccounts.length>1&&<button type="button" style={S.rBtn} title="계좌 숨기기" onClick={()=>hideAccount(k)}>✕</button>}
               </div>
             ))}
+            <button type="button" style={{...S.addRowBtn,marginTop:0,width:"auto",padding:"8px 14px"}} onClick={addAccount}>+ 계좌 추가</button>
           </div>
-          <div style={S.carryRow}>
-            <span style={{fontSize:13,color:"#9aa3b5"}}>전월 이월금액 ({dispAccount("국민")})</span>
-            <input style={S.carryInput} type="text" inputMode="numeric" value={fmt(carryoverKB)} placeholder="0" onChange={(e)=>setCarryoverFor("국민",e.target.value.replace(/[^0-9]/g,""))}/>
-            <span style={{fontSize:12,color:"#7a8295"}}>원</span>
-          </div>
-          <div style={S.carryRow}>
-            <span style={{fontSize:13,color:"#9aa3b5"}}>전월 이월금액 ({dispAccount("농협")})</span>
-            <input style={S.carryInput} type="text" inputMode="numeric" value={fmt(carryoverNH)} placeholder="0" onChange={(e)=>setCarryoverFor("농협",e.target.value.replace(/[^0-9]/g,""))}/>
-            <span style={{fontSize:12,color:"#7a8295"}}>원</span>
-          </div>
+          {(store.hiddenAccounts||[]).length>0&&(
+            <details style={{marginBottom:10}}>
+              <summary style={{cursor:"pointer",padding:"8px 10px",background:"#e8edf5",borderRadius:8,fontSize:13,fontWeight:600,color:"#1a2535",listStyle:"none",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>▶ 숨긴 계좌 ({(store.hiddenAccounts||[]).length}개)</span>
+                <span style={{fontSize:11,color:"#6b7585"}}>클릭하여 복원</span>
+              </summary>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
+                {(store.hiddenAccounts||[]).map((k)=>(
+                  <button key={k} className="ptag" style={{border:"1px solid #c8d0e0",borderRadius:6,padding:"5px 9px",fontSize:12,cursor:"pointer",background:"#fff",color:"#2a3348"}}
+                    onClick={()=>restoreAccount(k)}>↺ {dispAccount(k)}</button>
+                ))}
+              </div>
+            </details>
+          )}
+          {activeAccounts.map((id)=>(
+            <div key={id} style={S.carryRow}>
+              <span style={{fontSize:13,color:"#9aa3b5"}}>전월 이월금액 ({dispAccount(id)})</span>
+              <input style={S.carryInput} type="text" inputMode="numeric" value={fmt(carryoverFor(id))} placeholder="0" onChange={(e)=>setCarryoverFor(id,e.target.value.replace(/[^0-9]/g,""))}/>
+              <span style={{fontSize:12,color:"#7a8295"}}>원</span>
+            </div>
+          ))}
           <div style={S.oilRow}>
             <span style={S.oilLbl}>🛢 오일교환</span>
             <input style={S.oilKmInput} type="text" inputMode="numeric" value={fmt(store.oilChange?.baseKm||0)} onChange={(e)=>updOilChange("baseKm",e.target.value)}/>
@@ -1364,20 +1394,17 @@ function App(){
             )}
             {newEnt.type==="transfer"?(
               <>
-                <select style={{...S.ef,flexShrink:0}} value={newEnt.account} onChange={(e)=>setNewEnt({...newEnt,account:e.target.value})}>
-                  <option value="국민">{dispAccount("국민")}에서</option>
-                  <option value="농협">{dispAccount("농협")}에서</option>
+                <select style={{...S.ef,flexShrink:0}} value={transferFromVal} onChange={(e)=>setNewEnt({...newEnt,account:e.target.value})}>
+                  {activeAccounts.map((id)=><option key={id} value={id}>{dispAccount(id)}에서</option>)}
                 </select>
                 <span style={{fontSize:12,color:"#9aa3b5"}}>→</span>
-                <select style={{...S.ef,flexShrink:0}} value={newEnt.toAccount} onChange={(e)=>setNewEnt({...newEnt,toAccount:e.target.value})}>
-                  <option value="농협">{dispAccount("농협")}으로</option>
-                  <option value="국민">{dispAccount("국민")}으로</option>
+                <select style={{...S.ef,flexShrink:0}} value={transferToVal} onChange={(e)=>setNewEnt({...newEnt,toAccount:e.target.value})}>
+                  {transferToOptions.map((id)=><option key={id} value={id}>{dispAccount(id)}으로</option>)}
                 </select>
               </>
             ):((newEnt.type==="income"||newEnt.payMethod==="현금")&&(
-              <select style={{...S.ef,flexShrink:0}} value={newEnt.account} onChange={(e)=>setNewEnt({...newEnt,account:e.target.value})}>
-                <option value="국민">{dispAccount("국민")}</option>
-                <option value="농협">{dispAccount("농협")}</option>
+              <select style={{...S.ef,flexShrink:0}} value={plainAccountVal} onChange={(e)=>setNewEnt({...newEnt,account:e.target.value})}>
+                {activeAccounts.map((id)=><option key={id} value={id}>{dispAccount(id)}</option>)}
               </select>
             ))}
             {newEnt.type==="expense"&&(
@@ -1432,7 +1459,7 @@ function App(){
           {/* 요약 */}
           <div style={S.summary}>
             <div style={{...S.sRow,fontWeight:700,fontSize:14,borderBottom:"2px solid #c8d4e8",paddingBottom:8,marginBottom:4}}>
-              <span>이월 잔액 ({dispAccount("국민")}+{dispAccount("농협")})</span><span>{fmt(carryover)}원</span>
+              <span>이월 잔액 ({activeAccounts.map(dispAccount).join("+")})</span><span>{fmt(carryover)}원</span>
             </div>
             <div style={{...S.sRow,fontSize:13,color:"#1a6b3a",padding:"6px 0"}}>
               <span>이달의 수입 합계 <span style={{fontSize:10.5,color:"#7a8295",fontWeight:400}}>(계좌이체 제외)</span></span>
@@ -1460,18 +1487,16 @@ function App(){
               </div>
             </div>
             <div style={{marginTop:4,padding:"8px 0",borderTop:"1px solid #d0d8e8"}}>
-              <div style={{...S.sRow,fontSize:13,fontWeight:600,color:"#1a2535"}}>
-                <span>{dispAccount("국민")} 잔액</span>
-                <span style={{color:kbBalance>=0?"#1a5c30":"#9b1c1c"}}>{fmt(kbBalance)}원</span>
-              </div>
-              <div style={{...S.sRow,fontSize:13,fontWeight:600,color:"#1a2535",marginTop:4}}>
-                <span>{dispAccount("농협")} 잔액</span>
-                <span style={{color:nhBalance>=0?"#1a5c30":"#9b1c1c"}}>{fmt(nhBalance)}원</span>
-              </div>
+              {accountBalances.map(({id,balance})=>(
+                <div key={id} style={{...S.sRow,fontSize:13,fontWeight:600,color:"#1a2535",marginTop:4}}>
+                  <span>{dispAccount(id)} 잔액</span>
+                  <span style={{color:balance>=0?"#1a5c30":"#9b1c1c"}}>{fmt(balance)}원</span>
+                </div>
+              ))}
             </div>
             <div style={{...S.sRow,marginTop:4,fontSize:13,fontWeight:700,color:"#1a2535",borderTop:"1px solid #d0d8e8",paddingTop:8}}>
               <span>이달의 전체 수입 - 지출 (합계)</span>
-              <span style={{color:(kbBalance+nhBalance)>=0?"#1a5c30":"#9b1c1c"}}>{fmt(kbBalance+nhBalance)}원</span>
+              <span style={{color:totalBalance>=0?"#1a5c30":"#9b1c1c"}}>{fmt(totalBalance)}원</span>
             </div>
             <div style={{fontSize:11,color:"#4a5568",marginTop:6}}>
               ※ 스위스 운행매출은 매월 20일 입금 후 직접 기입
